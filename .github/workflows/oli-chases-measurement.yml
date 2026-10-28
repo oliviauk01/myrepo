@@ -1,0 +1,48 @@
+name: oli-chases daily measurement
+
+# Fetches @oli.chases Instagram Insights (official Graph API), appends snapshots,
+# rebuilds the report + daily brief, and commits ONLY oli-chases/analytics files.
+# Scheduled runs only fire from the default branch (after this file is merged there).
+on:
+  schedule:
+    - cron: "17 13 * * *"   # daily 13:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: oli-chases-measurement
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch Instagram Insights
+        working-directory: oli-chases/analytics/scripts
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_GRAPH_HOST: ${{ vars.IG_GRAPH_HOST }}
+        # A fetch failure is logged in fetch_log.csv; the brief still rebuilds and reports it.
+        run: python3 fetch_ig_insights.py || echo "fetch failed; see fetch_log.csv"
+      - name: Build report and daily brief
+        working-directory: oli-chases/analytics/scripts
+        run: python3 build_reports.py
+      - name: Commit measurement files only
+        run: |
+          git add -A oli-chases/analytics
+          outside=$(git status --porcelain | grep -v ' oli-chases/analytics/' || true)
+          if [ -n "$outside" ]; then echo "Refusing: changes outside oli-chases/analytics:"; echo "$outside"; exit 1; fi
+          if git diff --cached --name-only | grep -q '^oli-chases/analytics/raw/'; then echo "Refusing: raw exports staged"; exit 1; fi
+          if git diff --cached --quiet; then echo "No changes"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(measurement): oli-chases daily snapshot $(date -u +%F)"
+          git push
