@@ -90,10 +90,14 @@ def rates(s):
         "follows/profile_visits": ratio(s["follows"], s["profile_visits"]),
         "shares/reach": ratio(s["shares"], s["reach"]),
         "saves/reach": ratio(s["saves"], s["reach"]),
+        # Only organic views carry the follower breakdown.
+        "non_follower_views/views": ratio(s.get("non_follower_views"), s["views"])
+        if "views_scope=organic" in s["data_status"] else None,
     }
 
 
-RATE_KEYS = ["follows/reach", "profile_visits/reach", "follows/profile_visits", "shares/reach", "saves/reach"]
+RATE_KEYS = ["follows/reach", "profile_visits/reach", "follows/profile_visits", "shares/reach", "saves/reach",
+             "non_follower_views/views"]
 
 
 def attributable(conv):
@@ -109,8 +113,8 @@ def group_table(title, rows, key_fn, registry, attr):
     for (cid, _b, _src), s in rows:
         groups[key_fn(registry[cid])].append((cid, s))
     lines = [f"#### {title}", "",
-             "| 群組 | 內容數 | 中位 follows/reach | 中位 PV/reach | 中位 follows/PV | 中位 shares/reach | 中位 saves/reach | 可歸因轉換（direct_utm+manychat_keyword） | 樣本 |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "| 群組 | 內容數 | 中位 follows/reach | 中位 PV/reach | 中位 follows/PV | 中位 shares/reach | 中位 saves/reach | 中位 non-follower views % | 可歸因轉換（direct_utm+manychat_keyword） | 樣本 |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for g in sorted(groups):
         items = groups[g]
         r = [rates(s) for _, s in items]
@@ -130,20 +134,21 @@ def build_report(registry, snaps_all, snaps, conv, today):
     sources = sorted({k[2] for k in best})
     for src in sources:
         L += [f"## 來源：`{src}`", ""]
-        for b in ["~1h", "~24h", "2-8d", "8d+", "cumulative"]:
+        for b in ["~1h", "3-18h", "~24h", "2-8d", "8d+", "cumulative"]:
             rows = [(k, s) for k, s in best.items() if k[1] == b and k[2] == src]
             if not rows:
                 continue
             rows.sort(key=lambda kv: registry[kv[0][0]]["published_at"])
             L += [f"### Snapshot age：{b}（{len(rows)} 篇，{sample_flag(len(rows))}）", "",
-                  "| content_id | 發布(來源字串) | pillar | format | CTA | reach | PV | follows | follows/reach | PV/reach | follows/PV | shares/reach | saves/reach |",
-                  "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+                  "| content_id | 發布(來源字串) | pillar | format | CTA | reach | PV | follows | follows/reach | PV/reach | follows/PV | shares/reach | saves/reach | non-follower views % | 3s skip rate（Reel） |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
             for (cid, _b, _s), s in rows:
                 reg, r = registry[cid], rates(s)
                 cta = "/".join(x for x in [reg["cta_type"], reg["cta_keyword"]] if x)
                 L.append(f"| {cid} | {reg['published_at']} | {reg['pillar']} | {reg['format']} | {cta} | "
                          f"{s['reach']} | {s['profile_visits']} | {s['follows']} | " +
-                         " | ".join(pct(r[k]) for k in RATE_KEYS) + " |")
+                         " | ".join(pct(r[k]) for k in RATE_KEYS) +
+                         f" | {pct(num(s['retention_or_skip_rate']))} |")  # API returns a decimal
             L.append("")
             L += group_table("依 pillar", rows, lambda r: r["pillar"], registry, attr)
             L += group_table("依年份", rows, lambda r: r["published_at"][:4], registry, attr)
@@ -182,6 +187,8 @@ def build_report(registry, snaps_all, snaps, conv, today):
           f"- 待確認（不進正式分析）的快照：{len(review)} 列",
           f"- 未標記 pillar 的內容：{len(untagged)} 篇；pillar 為推論待確認：{len(inferred)} 篇",
           "- 歷史 Sheet 未記錄：views、follows、non_follower_reach、avg_watch_time、retention",
+          "- Graph API 數值皆為 lifetime 累計；snapshot_at 是抓取時間，相鄰快照差值才是區間增量",
+          "- avg_watch_time 單位未知，未當秒數使用；Graph API 無單篇 non-follower reach（以 non-follower views 代替，欄位分開）",
           "- Sheet 發布/追蹤時間為 Apps Script 時區字串，未經官方欄位證實；未做時區轉換", ""]
     return "\n".join(L) + "\n"
 

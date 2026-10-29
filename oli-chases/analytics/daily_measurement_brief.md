@@ -1,14 +1,12 @@
 # @oli.chases Daily Measurement Brief
 
-- 產生日期：2026-10-28（由 tracker 資料自動產生，`scripts/build_reports.py`）
+- 產生日期：2026-10-29（由 tracker 資料自動產生，`scripts/build_reports.py`）
 - 資料涵蓋截止（各來源最新 snapshot_at；來源不合併）：
   - `gsheet_ig_auto_tracking`：2026-10-23 12:51
 
 ## 今日新增 / 更新的快照
 
 **今日沒有新快照。** 以下為既有資料的狀態，不是今日更新。
-- 抓取紀錄：`ig_graph_api` * → skipped IG_ACCESS_TOKEN not set; no automatic fetch performed
-- 今日另有 4 筆歷史/人工匯入紀錄（見 fetch_log.csv），匯入的是舊快照，不代表今日新表現。
 
 ## 各 pillar 最近方向性表現（~24h 快照，最近 60 天發布 vs 全部）
 

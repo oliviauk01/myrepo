@@ -37,6 +37,8 @@ SNAPSHOT_FIELDS = [
     "non_follower_reach", "profile_visits", "follows", "likes", "comments",
     "shares", "saves", "avg_watch_time", "retention_or_skip_rate",
     "data_source", "data_status",
+    # Added 2026-10-29 (blank for rows captured before then / by sources without them).
+    "plays", "replays", "non_follower_views",
 ]
 CONVERSION_FIELDS = [
     "event_at", "content_id", "conversion_type", "conversion_count",
@@ -79,6 +81,18 @@ def ensure_file(path, fields):
     if not os.path.exists(path):
         with open(path, "w", newline="", encoding="utf-8") as f:
             csv.DictWriter(f, fieldnames=fields).writeheader()
+        return
+    with open(path, newline="", encoding="utf-8") as f:
+        header = next(csv.reader(f), [])
+    if header != fields and header == fields[:len(header)]:
+        # Schema grew by appended columns: rewrite header, existing values untouched, new cells blank.
+        rows = read_rows(path)
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=fields)
+            w.writeheader()
+            w.writerows({k: r.get(k, "") for k in fields} for r in rows)
+    elif header != fields:
+        raise ValueError(f"{path}: header {header} does not match schema")
 
 
 def append_rows(path, fields, rows):

@@ -1,6 +1,6 @@
 # @oli.chases Instagram Measurement Tracker
 
-最近更新：2026-10-28
+最近更新：2026-10-29
 
 追蹤路徑：**內容 → Profile Visit → Follow → Newsletter / 有效服務詢問 / Workshop 報名 / Purchase**。
 核心目標是 **Follow → Convert**。Views、Reach 是診斷指標，不是成功標準。
@@ -35,9 +35,13 @@
 - `content_status`：`published`、`needs_tagging`、`pending_confirmation`（帳號/來源未確認，不進分析）。
 
 **performance_snapshots.csv**
-- `snapshot_at`：抓取時間。Sheet 為原字串；Graph API 為 UTC、取整到小時；MBS 為 `--as-of` 匯出日。
+- `snapshot_at`：抓取時間（captured_at）。Sheet 為原字串；Graph API 為實際抓取的 UTC 時間（到分鐘）；MBS 為 `--as-of` 匯出日。
+- **Graph API 回傳的都是 lifetime 累計值，沒有時間窗口。** 一列不是「那一小時的增量」；區間增量 = 相鄰兩筆快照相減。
 - `age_hours`：snapshot_at − published_at（同一來源的時間字串相減，未做時區轉換）；MBS 累計值為空白。
-- 指標欄：`views, reach, non_follower_reach, profile_visits, follows, likes, comments, shares, saves, avg_watch_time, retention_or_skip_rate`。**缺值保留空白，實際 0 才記 0。**
+- 指標欄：`views, reach, non_follower_reach, profile_visits, follows, likes, comments, shares, saves, avg_watch_time, retention_or_skip_rate, plays, replays, non_follower_views`（最後三欄 2026-10-29 新增，之前的列為空白）。**缺值保留空白，實際 0 才記 0。**
+  - `retention_or_skip_rate`：Graph API 的 3 秒跳出率，**以小數儲存**（0.3478 = 34.78%）。
+  - `avg_watch_time`：單位未知，保留原值，不當秒數使用。
+  - `non_follower_reach`：Graph API 沒有單篇數值，保持空白；改用 `non_follower_views`（organic views 的 follower breakdown 中的 non_follower），報告計算 non_follower_views / views。
 - `data_source`：`gsheet_ig_auto_tracking`、`ig_graph_api`、`mbs_export:<label>`。
 - `data_status`：以 `;` 分隔。第一個 token 為 `ok` 才進正式分析；`needs_review:*` 不進分析。其他 token：`sheet_label=1h/24h/final/latest`、`timezone=unverified`、`not_in_source=…`、`unavailable=…`（平台不提供）、`missing=…`、`mbs_duration_sec=…`、`cumulative_as_of_export`。
 
@@ -54,7 +58,7 @@
 | Life Insight | 人生選擇與心態 | 人生選擇、生活節奏、心態轉變、情緒管理、成功定義、海外生活心態 |
 
 ## 快照規則
-- Graph API：發布後 14 天內每次執行都抓；之後在第 21、30、60、90 天各抓一次；超過 95 天不再抓。
+- Graph API：發布後 48 小時內每小時一筆；48 小時到 14 天每天一筆；之後在第 21、30、60、90 天各一筆；超過 95 天不再抓。同一 content 同一 UTC 小時最多一筆。
 - 報告將快照分為 `~1h`（≤3h）、`3-18h`、`~24h`（18–30h）、`2-8d`、`8d+`、`cumulative`（MBS 累計）；只在同一 age bucket、同一來源內比較。
 - 不同來源、不同截止日的數字分列保存，不挑一個當真值。
 
@@ -84,11 +88,29 @@
 
 | 來源 | 狀態 | 可取得 | 不可取得 / 原因 |
 |---|---|---|---|
-| Instagram Graph API（`fetch_ig_insights.py`） | 已實作；**需 GitHub Secret `IG_ACCESS_TOKEN` 才會執行** | views、reach、likes、comments、shares、saves；FEED/carousel 的 profile_visits、follows；Reels 的 ig_reels_avg_watch_time。實際可用與否依媒體類型與 API 版本，拒絕的指標記為 `unavailable` | non_follower_reach、retention/skip rate：Graph API 不提供單篇數值，只能從 App/MBS 人工查看 |
+| Instagram Graph API（`fetch_ig_insights.py`） | 已實作；**需 GitHub Secret `IG_ACCESS_TOKEN` 才會執行** | 見下方指標對照表。實際可用與否依媒體類型與 API 版本，被拒絕的指標記為 `unavailable` | non_follower_reach：沒有單篇數值 |
 | Google Sheet「@oli_chases IG 自動追蹤數據」 | 已備份至 `sources/ig_tracking_sheet_backup_2026-10-28.csv` 並匯入 | reach、likes、comments、saves、shares、profile_visits（部分）、Beehiiv 24h 新增 | views、follows、watch time 從未記錄；4 篇 `final` 列沒有追蹤時間 → `needs_review` |
 | Google Sheet「oli.chases Funnel Tracking」（ManyChat/Make） | 已去識別為 `sources/funnel_tracking_extract_2026-10-28.csv` 並彙總 | 每日依 source_post / campaign / CTA 的 lead 數 | Beehiiv 是否確認訂閱；workshop 實際報名 |
 | MBS 匯出 | 腳本已備（`import_mbs_export.py`），**檔案尚未放入** | 依匯出欄位 | 時區無官方欄位；8/30、9/10 duration 7s/6s 待核實 |
 | `oli_chases_reels_performance.csv` / `oli_chases_reels_snapshots.csv` | **在 repo 與 Google Drive 皆未找到** | — | 放入 `raw/` 後可用 MBS 匯入器或另寫對應 |
+
+### Graph API 指標對照（`GET /{ig-media-id}/insights?metric=...`）
+
+名稱對照自 Muse `individual-post-insights` 的實測原始回傳（`source_terms`）；不需要經過 Muse，直接呼叫 Graph API。每個指標各自一次請求，某個指標被拒絕不會影響其他指標。
+
+| 欄位 | metric | 適用 | 備註 |
+|---|---|---|---|
+| views | `instagram_organic_media_content_views_count` | 全部 | 有機 views（`views_scope=organic`）；被拒絕時改用 `views`，並標記 `views_scope=total`，不可與有機值混比 |
+| non_follower_views | 同上，`organic_follower_breakdown.non_follower` | 全部 | 不是獨立指標 |
+| follows | `instagram_organic_media_follow_count` | 全部 | 被拒絕時改用 `follows` |
+| profile_visits | `instagram_media_profile_views_from_impressions_count` | 全部 | 被拒絕時改用 `profile_visits` |
+| plays | `ig_clips_play_count` | 只限 Reel | |
+| replays | `instagram_clips_video_replay_count` | 只限 Reel | |
+| retention_or_skip_rate | `ig_reels_skip_rate` | 只限 Reel | 小數 |
+| avg_watch_time | `ig_reels_avg_watch_time` | 只限 Reel | 單位未知 |
+| reach / likes / comments / shares / saves | `reach` / `likes` / `comments` / `shares` / `saved` | 全部 | |
+
+Carousel 不請求 Reel 專屬指標（`data_status` 標記 `not_applicable=…`）。
 
 Sheet 目前沒有自動同步腳本（同步需要 Google service account）；Graph API 抓取取代 Sheet 作為今後的自動來源。若要再匯入 Sheet 新列：將「貼文數據」分頁下載為 CSV → 存成 `sources/ig_tracking_sheet_backup_<日期>.csv`（刪除「主題摘要」欄）→ 執行匯入（重複列自動跳過）。
 
@@ -110,10 +132,10 @@ python3 build_reports.py
 3. `python3 import_manual_conversions.py ../sources/manual_conversions_<日期>.csv`，再 `python3 build_reports.py`。
 
 ## 自動排程
-`.github/workflows/oli-chases-measurement.yml`：每日 13:17 UTC 及手動觸發。抓取 → 重建報告/brief → 只提交 `oli-chases/analytics/`（若有其他路徑或 `raw/` 變更則拒絕提交）。GitHub 的 schedule 只在 **default branch** 生效。
+`.github/workflows/oli-chases-measurement.yml`：每小時第 23 分及手動觸發（是否寫入由上方快照規則逐篇決定，沒有到期的貼文就不提交）。抓取 → 重建報告/brief → 只提交 `oli-chases/analytics/`（若有其他路徑或 `raw/` 變更則拒絕提交）。GitHub 的 schedule 只在 **default branch** 生效。
 
 需要的 GitHub 設定：
-- Secret `IG_ACCESS_TOKEN`（必要）：Instagram 專業帳號的長期 token，權限 `instagram_basic` + `instagram_manage_insights`（Facebook Login）或 `instagram_business_basic` + `instagram_business_manage_insights`（Instagram Login）。長期 token 約 60 天到期，需定期更新。
+- Secret `IG_ACCESS_TOKEN`（必要；需具備與 Muse 相同的 insights 權限）：Instagram 專業帳號的長期 token，權限 `instagram_basic` + `instagram_manage_insights`（Facebook Login）或 `instagram_business_basic` + `instagram_business_manage_insights`（Instagram Login）。長期 token 約 60 天到期，需定期更新。
 - Secret `IG_USER_ID`（可選，預設 17841431932380351）。
 - Variable `IG_GRAPH_HOST`（可選）：用 Instagram Login token 時設為 `graph.instagram.com`。
 - Settings → Actions → Workflow permissions 允許 Read and write。
