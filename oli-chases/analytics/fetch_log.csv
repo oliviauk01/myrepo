@@ -1,6 +1,0 @@
-run_at,source,content_id,status,missing_fields,error
-2026-10-28T02:07:58Z,import:ig_tracking_sheet_backup_2026-10-28.csv,*,ok registry+28 snapshots+44 conversions+3 excluded=0,"views,follows,non_follower_reach,avg_watch_time,retention_or_skip_rate",
-2026-10-28T02:07:58Z,import:funnel_tracking_extract_2026-10-28.csv,*,ok leads=28 conversion_rows+15 excluded=14,,
-2026-10-28T02:07:58Z,import:ig_tracking_sheet_backup_2026-10-28.csv,*,ok registry+0 snapshots+0 conversions+0 excluded=0,"views,follows,non_follower_reach,avg_watch_time,retention_or_skip_rate",
-2026-10-28T02:07:58Z,import:funnel_tracking_extract_2026-10-28.csv,*,ok leads=28 conversion_rows+0 excluded=14,,
-2026-10-28T02:07:58Z,ig_graph_api,*,skipped,,IG_ACCESS_TOKEN not set; no automatic fetch performed
